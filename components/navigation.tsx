@@ -5,7 +5,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Menu, Zap, Wallet } from "lucide-react"
+import { Menu, Zap } from "lucide-react"
+import { WalletConnectButton } from "@/components/wallet-connect-button"
 
 export default function Navigation() {
   const pathname = usePathname()
@@ -49,13 +50,7 @@ export default function Navigation() {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center space-x-4">
-            <Button
-              variant="outline"
-              className="border-[#22D3EE] text-[#22D3EE] hover:bg-[#22D3EE] hover:text-[#0C101A] bg-transparent"
-            >
-              <Wallet className="w-4 h-4 mr-2" />
-              Connect Wallet
-            </Button>
+            <WalletConnectButton />
           </div>
 
           {/* Mobile Menu */}
@@ -79,10 +74,9 @@ export default function Navigation() {
                     {item.label}
                   </Link>
                 ))}
-                <Button className="bg-[#22D3EE] hover:bg-[#22D3EE]/90 text-[#0C101A] mt-8">
-                  <Wallet className="w-4 h-4 mr-2" />
-                  Connect Wallet
-                </Button>
+                <div className="mt-8">
+                  <WalletConnectButton />
+                </div>
               </div>
             </SheetContent>
           </Sheet>

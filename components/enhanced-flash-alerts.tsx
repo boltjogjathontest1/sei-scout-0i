@@ -1,114 +1,81 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertTriangle, Settings, Clock, Bell, Zap } from "lucide-react"
+import { AlertTriangle, Settings, Clock, Bell, Zap, ExternalLink } from "lucide-react"
+import { seitraceTx } from "@/lib/sei-config"
 
 interface Alert {
-  id: number
+  id: string
   severity: "critical" | "high" | "medium" | "low"
-  category: string
-  message: string
-  time: string
-  icon: string
-  wallet?: string
-  amount?: string
+  type: string
+  title: string
+  description: string
+  address: string
+  transactionHash: string
+  blockNumber: string
+  detectedAt: string
+  deliveredAt: string
+  latency: number
+  evidence: {
+    contract: string
+    topics: string[]
+    blockHash: string
+  }
+}
+
+interface AlertStats {
+  total24h: number
+  critical: number
+  high: number
+  avgLatency: number
 }
 
 export default function EnhancedFlashAlerts() {
-  const [alerts, setAlerts] = useState<Alert[]>([
-    {
-      id: 1,
-      severity: "critical",
-      category: "Large Transfer",
-      message: "Massive transfer detected: 50,000 SEI to unknown wallet",
-      time: "2 min ago",
-      icon: "🔴",
-      wallet: "sei1abc...def",
-      amount: "50,000 SEI",
-    },
-    {
-      id: 2,
-      severity: "high",
-      category: "New Token",
-      message: "New token purchase: NEBULA token (10K SEI investment)",
-      time: "5 min ago",
-      icon: "🟡",
-      wallet: "sei1ghi...jkl",
-      amount: "10,000 SEI",
-    },
-    {
-      id: 3,
-      severity: "medium",
-      category: "Smart Contract",
-      message: "Complex smart contract interaction: Astroport Router",
-      time: "12 min ago",
-      icon: "🔵",
-      wallet: "sei1mno...pqr",
-    },
-    {
-      id: 4,
-      severity: "high",
-      category: "Unusual Time",
-      message: "Suspicious off-hours activity: 3AM large transfer",
-      time: "18 min ago",
-      icon: "🟠",
-      wallet: "sei1stu...vwx",
-      amount: "25,000 SEI",
-    },
-    {
-      id: 5,
-      severity: "critical",
-      category: "MEV Activity",
-      message: "Potential MEV bot detected: High-frequency arbitrage",
-      time: "25 min ago",
-      icon: "⚫",
-      wallet: "sei1xyz...abc",
-    },
-  ])
-
+  const [alerts, setAlerts] = useState<Alert[]>([])
   const [showConfig, setShowConfig] = useState(false)
-  const [alertStats, setAlertStats] = useState({
-    total24h: 47,
-    critical: 3,
-    high: 12,
-    avgResponseTime: "0.8s",
+  const [isConnected, setIsConnected] = useState(false)
+  const [alertStats, setAlertStats] = useState<AlertStats>({
+    total24h: 0,
+    critical: 0,
+    high: 0,
+    avgLatency: 0,
   })
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const alertTypes = [
-        { category: "Large Transfer", icon: "🔴", severity: "critical" as const },
-        { category: "New Token", icon: "🟡", severity: "high" as const },
-        { category: "Smart Contract", icon: "🔵", severity: "medium" as const },
-        { category: "Unusual Time", icon: "🟠", severity: "high" as const },
-        { category: "MEV Activity", icon: "⚫", severity: "critical" as const },
-      ]
-
-      const randomType = alertTypes[Math.floor(Math.random() * alertTypes.length)]
-      const newAlert: Alert = {
-        id: Date.now(),
-        severity: randomType.severity,
-        category: randomType.category,
-        message: `${randomType.category} detected in wallet sei1${Math.random().toString(36).substr(2, 6)}...`,
-        time: "now",
-        icon: randomType.icon,
-        wallet: `sei1${Math.random().toString(36).substr(2, 6)}...`,
-        amount:
-          randomType.category === "Large Transfer" ? `${Math.floor(Math.random() * 50000 + 10000)} SEI` : undefined,
+  const fetchAlerts = useCallback(async () => {
+    try {
+      const response = await fetch("/api/alerts/recent?limit=10")
+      if (response.ok) {
+        const data = await response.json()
+        setAlerts(data.alerts)
+        setAlertStats({
+          total24h: data.alerts.length,
+          critical: data.alerts.filter((a: Alert) => a.severity === "critical").length,
+          high: data.alerts.filter((a: Alert) => a.severity === "high").length,
+          avgLatency: data.metadata.avgLatency,
+        })
+        setIsConnected(true)
       }
+    } catch (error) {
+      console.error("Failed to fetch alerts:", error)
+      setIsConnected(false)
+    }
+  }, [])
 
-      setAlerts((prev) => [newAlert, ...prev.slice(0, 9)])
-      setAlertStats((prev) => ({ ...prev, total24h: prev.total24h + 1 }))
-    }, 6000)
+  useEffect(() => {
+    fetchAlerts()
+
+    const interval = setInterval(() => {
+      fetchAlerts()
+    }, 3000) // Poll every 3 seconds for real-time updates
 
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchAlerts])
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -140,6 +107,30 @@ export default function EnhancedFlashAlerts() {
     }
   }
 
+  const getAlertIcon = (type: string) => {
+    const icons = {
+      large_transfer: "🔴",
+      unusual_activity: "🟡",
+      dex_interaction: "🔵",
+      staking_withdrawal: "🟠",
+      contract_interaction: "⚫",
+    }
+    return icons[type as keyof typeof icons] || "🔔"
+  }
+
+  const formatTime = (timestamp: string) => {
+    const now = new Date()
+    const alertTime = new Date(timestamp)
+    const diffMs = now.getTime() - alertTime.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+
+    if (diffMins < 1) return "now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours < 24) return `${diffHours}h ago`
+    return alertTime.toLocaleDateString()
+  }
+
   return (
     <Card className="bg-[#1A202C] border-[#2D3748]">
       <CardHeader>
@@ -148,8 +139,10 @@ export default function EnhancedFlashAlerts() {
             <AlertTriangle className="w-6 h-6 mr-3" />
             FlashAlert System
             <div className="flex items-center ml-3">
-              <div className="w-3 h-3 bg-[#22D3EE] rounded-full animate-pulse"></div>
-              <span className="text-sm text-gray-400 ml-2">Live</span>
+              <div
+                className={`w-3 h-3 rounded-full ${isConnected ? "bg-[#22D3EE] animate-pulse" : "bg-red-500"}`}
+              ></div>
+              <span className="text-sm text-gray-400 ml-2">{isConnected ? "Live" : "Offline"}</span>
             </div>
           </CardTitle>
           <Button
@@ -177,8 +170,8 @@ export default function EnhancedFlashAlerts() {
             <div className="text-xs text-gray-400">High Priority</div>
           </div>
           <div className="text-center p-3 bg-[#0C101A] rounded-lg">
-            <div className="text-2xl font-bold text-[#22D3EE]">{alertStats.avgResponseTime}</div>
-            <div className="text-xs text-gray-400">Avg Response</div>
+            <div className="text-2xl font-bold text-[#22D3EE]">{alertStats.avgLatency}ms</div>
+            <div className="text-xs text-gray-400">Avg Latency</div>
           </div>
         </div>
       </CardHeader>
@@ -202,15 +195,15 @@ export default function EnhancedFlashAlerts() {
                 </div>
                 <div className="flex items-center justify-between p-3 bg-[#1A202C] rounded-lg">
                   <div>
-                    <Label className="font-semibold">🟡 New Token Purchase</Label>
-                    <div className="text-sm text-gray-400">Any new token acquisition</div>
+                    <Label className="font-semibold">🟡 Unusual Activity</Label>
+                    <div className="text-sm text-gray-400">Pattern anomaly detection</div>
                   </div>
                   <Switch defaultChecked />
                 </div>
                 <div className="flex items-center justify-between p-3 bg-[#1A202C] rounded-lg">
                   <div>
-                    <Label className="font-semibold">🟠 Off-hours Activity</Label>
-                    <div className="text-sm text-gray-400">Activity between 12AM-6AM</div>
+                    <Label className="font-semibold">🟠 Staking Withdrawals</Label>
+                    <div className="text-sm text-gray-400">Large unstaking events</div>
                   </div>
                   <Switch />
                 </div>
@@ -218,15 +211,15 @@ export default function EnhancedFlashAlerts() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 bg-[#1A202C] rounded-lg">
                   <div>
-                    <Label className="font-semibold">🔵 Smart Contract Interaction</Label>
-                    <div className="text-sm text-gray-400">Complex contract calls</div>
+                    <Label className="font-semibold">🔵 DEX Interactions</Label>
+                    <div className="text-sm text-gray-400">Swap and liquidity events</div>
                   </div>
                   <Switch defaultChecked />
                 </div>
                 <div className="flex items-center justify-between p-3 bg-[#1A202C] rounded-lg">
                   <div>
-                    <Label className="font-semibold">⚫ MEV Bot Detection</Label>
-                    <div className="text-sm text-gray-400">Potential MEV activity</div>
+                    <Label className="font-semibold">⚫ Contract Interactions</Label>
+                    <div className="text-sm text-gray-400">Smart contract calls</div>
                   </div>
                   <Switch defaultChecked />
                 </div>
@@ -241,42 +234,62 @@ export default function EnhancedFlashAlerts() {
 
         {/* Enhanced Alert Feed */}
         <div className="space-y-3 max-h-96 overflow-y-auto">
-          {alerts.map((alert) => (
-            <div
-              key={alert.id}
-              className={`p-4 rounded-xl border-2 ${getSeverityColor(alert.severity)} hover:scale-[1.02] transition-all duration-200`}
-            >
-              <div className="flex items-start space-x-4">
-                <div className="text-2xl">{alert.icon}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-3">
-                      <Badge
-                        variant="outline"
-                        className={`text-sm font-semibold ${getSeverityBadgeColor(alert.severity)}`}
+          {alerts.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              {isConnected ? "No recent alerts" : "Connecting to alert feed..."}
+            </div>
+          ) : (
+            alerts.map((alert) => (
+              <div
+                key={alert.id}
+                className={`p-4 rounded-xl border-2 ${getSeverityColor(alert.severity)} hover:scale-[1.02] transition-all duration-200`}
+              >
+                <div className="flex items-start space-x-4">
+                  <div className="text-2xl">{getAlertIcon(alert.type)}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-3">
+                        <Badge
+                          variant="outline"
+                          className={`text-sm font-semibold ${getSeverityBadgeColor(alert.severity)}`}
+                        >
+                          {alert.title}
+                        </Badge>
+                        <Badge variant="outline" className={`text-xs ${getSeverityBadgeColor(alert.severity)}`}>
+                          {alert.severity.toUpperCase()}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs border-[#22D3EE] text-[#22D3EE]">
+                          {alert.latency}ms
+                        </Badge>
+                      </div>
+                      <span className="text-sm text-gray-400 flex items-center">
+                        <Clock className="w-4 h-4 mr-1" />
+                        {formatTime(alert.detectedAt)}
+                      </span>
+                    </div>
+                    <p className="text-base font-medium text-gray-200 mb-2">{alert.description}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4 text-sm">
+                        <span className="font-mono text-[#22D3EE]">
+                          {alert.address.slice(0, 8)}...{alert.address.slice(-6)}
+                        </span>
+                        <span className="text-gray-400">Block: {alert.blockNumber}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[#22D3EE] hover:bg-[#22D3EE]/20"
+                        onClick={() => window.open(seitraceTx(alert.transactionHash), "_blank")}
                       >
-                        {alert.category}
-                      </Badge>
-                      <Badge variant="outline" className={`text-xs ${getSeverityBadgeColor(alert.severity)}`}>
-                        {alert.severity.toUpperCase()}
-                      </Badge>
+                        <ExternalLink className="w-3 h-3 mr-1" />
+                        View
+                      </Button>
                     </div>
-                    <span className="text-sm text-gray-400 flex items-center">
-                      <Clock className="w-4 h-4 mr-1" />
-                      {alert.time}
-                    </span>
                   </div>
-                  <p className="text-base font-medium text-gray-200 mb-2">{alert.message}</p>
-                  {(alert.wallet || alert.amount) && (
-                    <div className="flex items-center space-x-4 text-sm">
-                      {alert.wallet && <span className="font-mono text-[#22D3EE]">Wallet: {alert.wallet}</span>}
-                      {alert.amount && <span className="font-semibold text-yellow-400">Amount: {alert.amount}</span>}
-                    </div>
-                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Enhanced Notification Methods */}
@@ -287,7 +300,7 @@ export default function EnhancedFlashAlerts() {
               <span className="font-semibold text-lg">Notification Channels</span>
             </div>
             <Badge variant="outline" className="border-[#22D3EE] text-[#22D3EE]">
-              Multi-channel
+              Real-time
             </Badge>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -303,7 +316,7 @@ export default function EnhancedFlashAlerts() {
             </div>
             <div className="p-3 bg-[#1A202C] rounded-lg text-center">
               <div className="text-2xl mb-1">💬</div>
-              <div className="text-sm font-semibold">SMS</div>
+              <div className="text-sm font-semibold">Telegram</div>
               <div className="text-xs text-gray-500">Disabled</div>
             </div>
             <div className="p-3 bg-[#1A202C] rounded-lg text-center">
@@ -311,6 +324,20 @@ export default function EnhancedFlashAlerts() {
               <div className="text-sm font-semibold text-purple-400">Discord</div>
               <div className="text-xs text-green-500">Active</div>
             </div>
+          </div>
+        </div>
+
+        <div className="mt-4 p-3 bg-[#0C101A] rounded-lg border border-[#2D3748]">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-400">Alert verification available for auditors</div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-[#22D3EE] text-[#22D3EE] hover:bg-[#22D3EE]/10 bg-transparent"
+              onClick={() => window.open("/verify", "_blank")}
+            >
+              Download Logs
+            </Button>
           </div>
         </div>
       </CardContent>

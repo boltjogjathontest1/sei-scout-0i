@@ -1,17 +1,56 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Progress } from "@/components/ui/progress"
-import { TrendingUp, Shield, Network, AlertCircle, Brain, Target, Users, Activity } from "lucide-react"
+import {
+  TrendingUp,
+  Shield,
+  Network,
+  AlertCircle,
+  Brain,
+  Target,
+  Users,
+  Activity,
+  ExternalLink,
+  Loader2,
+} from "lucide-react"
 import Navigation from "@/components/navigation"
+import { seitraceAddr, seitraceTx } from "@/lib/sei-config"
+
+interface WalletAnalysis {
+  address: string
+  behaviorScore: string
+  riskAssessment: {
+    overall: string
+    identity: string
+    contract: string
+    liquidity: string
+    behavior: string
+  }
+  predictiveInsights: Array<{
+    prediction: string
+    confidence: number
+    evidence: string[]
+    reasoning: string
+  }>
+  evidence: {
+    recentTransactions: Array<{
+      hash: string
+      block: string
+      type: string
+    }>
+  }
+}
 
 export default function Analysis() {
-  const [selectedWallet, setSelectedWallet] = useState("sei1whale...")
+  const [selectedWallet, setSelectedWallet] = useState("0x742d35Cc6634C0532925a3b8D4C9db96590c6C87")
+  const [analysisData, setAnalysisData] = useState<WalletAnalysis | null>(null)
+  const [loading, setLoading] = useState(false)
 
   const behaviorMatrix = {
     transactionPatterns: "Regular, predictable",
@@ -20,18 +59,31 @@ export default function Analysis() {
     socialSignals: "Follows smart money movements",
   }
 
-  const predictiveInsights = [
-    "Likely to increase DeFi allocation by 15%",
-    "May exit NEBULA position within 7 days",
-    "Strong holder profile (avg hold: 45 days)",
-    "High probability of staking rewards claim",
-  ]
-
   const transactionPatterns = [
-    { time: "2024-01-15 14:30", wallet: "sei1abc...def", pattern: "DCA", confidence: "95%" },
-    { time: "2024-01-15 14:25", wallet: "sei1ghi...jkl", pattern: "Whale", confidence: "87%" },
-    { time: "2024-01-15 14:20", wallet: "sei1mno...pqr", pattern: "MEV", confidence: "92%" },
-    { time: "2024-01-15 14:15", wallet: "sei1stu...vwx", pattern: "DCA", confidence: "78%" },
+    {
+      time: "2024-01-15 14:30",
+      wallet: "0x742d35Cc6634C0532925a3b8D4C9db96590c6C87",
+      pattern: "DCA",
+      confidence: "95%",
+    },
+    {
+      time: "2024-01-15 14:25",
+      wallet: "0x8ba1f109551bD432803012645Hac136c22C177e9",
+      pattern: "Whale",
+      confidence: "87%",
+    },
+    {
+      time: "2024-01-15 14:20",
+      wallet: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+      pattern: "MEV",
+      confidence: "92%",
+    },
+    {
+      time: "2024-01-15 14:15",
+      wallet: "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+      pattern: "DCA",
+      confidence: "78%",
+    },
   ]
 
   const riskMetrics = [
@@ -41,6 +93,25 @@ export default function Analysis() {
     { label: "Behavior Risk", value: 40, color: "bg-yellow-500" },
   ]
 
+  const loadNetworkData = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/wallet/${selectedWallet}/analysis`)
+      if (response.ok) {
+        const data = await response.json()
+        setAnalysisData(data)
+      }
+    } catch (error) {
+      console.error("Failed to load network data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadNetworkData()
+  }, [selectedWallet])
+
   return (
     <div className="min-h-screen bg-[#0C101A] text-[#F7FAFC]">
       <Navigation />
@@ -49,9 +120,23 @@ export default function Analysis() {
         <div className="container mx-auto px-4">
           {/* Breadcrumb */}
           <div className="mb-6">
-            <div className="text-sm text-gray-400 mb-2">Dashboard &gt; Analysis &gt; {selectedWallet}</div>
-            <h1 className="text-3xl font-bold text-[#22D3EE] mb-2">Advanced Wallet Analysis</h1>
-            <p className="text-gray-400">Deep behavioral insights and predictive analytics</p>
+            <div className="text-sm text-gray-400 mb-2">
+              Dashboard &gt; Analysis &gt; {selectedWallet.slice(0, 8)}...{selectedWallet.slice(-6)}
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-[#22D3EE] mb-2">Advanced Wallet Analysis</h1>
+                <p className="text-gray-400">Deep behavioral insights and predictive analytics</p>
+              </div>
+              <Button
+                variant="outline"
+                className="border-[#22D3EE] text-[#22D3EE] hover:bg-[#22D3EE]/10 bg-transparent"
+                onClick={() => window.open(seitraceAddr(selectedWallet), "_blank")}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                View on Seitrace
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -104,8 +189,19 @@ export default function Analysis() {
                           Cluster Analysis
                         </Badge>
                       </div>
-                      <Button className="bg-[#22D3EE] hover:bg-[#22D3EE]/90 text-[#0C101A] mt-4">
-                        Load Network Data
+                      <Button
+                        className="bg-[#22D3EE] hover:bg-[#22D3EE]/90 text-[#0C101A] mt-4"
+                        onClick={loadNetworkData}
+                        disabled={loading}
+                      >
+                        {loading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          "Load Network Data"
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -122,23 +218,63 @@ export default function Analysis() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {predictiveInsights.map((insight, index) => (
-                      <div
-                        key={index}
-                        className="flex items-start space-x-3 p-3 bg-[#0C101A] rounded-lg border border-[#2D3748]"
-                      >
-                        <div className="w-2 h-2 bg-[#22D3EE] rounded-full mt-2"></div>
-                        <div>
-                          <p className="text-sm text-gray-300">{insight}</p>
-                          <div className="flex items-center space-x-2 mt-2">
-                            <Progress value={Math.floor(Math.random() * 40) + 60} className="w-20 h-2" />
-                            <Badge variant="outline" className="border-[#22D3EE] text-[#22D3EE] text-xs">
-                              {Math.floor(Math.random() * 40) + 60}% confidence
-                            </Badge>
+                    {analysisData?.predictiveInsights?.length > 0
+                      ? analysisData.predictiveInsights.map((insight, index) => (
+                          <div
+                            key={index}
+                            className="flex items-start space-x-3 p-3 bg-[#0C101A] rounded-lg border border-[#2D3748]"
+                          >
+                            <div className="w-2 h-2 bg-[#22D3EE] rounded-full mt-2"></div>
+                            <div className="flex-1">
+                              <p className="text-sm text-gray-300 mb-2">{insight.prediction}</p>
+                              <div className="flex items-center space-x-2 mb-2">
+                                <Progress value={insight.confidence} className="w-20 h-2" />
+                                <Badge variant="outline" className="border-[#22D3EE] text-[#22D3EE] text-xs">
+                                  {insight.confidence}% confidence
+                                </Badge>
+                              </div>
+                              <div className="text-xs text-gray-400 mb-2">{insight.reasoning}</div>
+                              <div className="flex flex-wrap gap-1">
+                                <span className="text-xs text-gray-500">Evidence:</span>
+                                {insight.evidence.slice(0, 3).map((txHash, i) => (
+                                  <Button
+                                    key={i}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-5 px-1 text-xs text-[#22D3EE] hover:bg-[#22D3EE]/20"
+                                    onClick={() => window.open(seitraceTx(txHash), "_blank")}
+                                  >
+                                    {txHash.slice(0, 6)}...
+                                    <ExternalLink className="w-2 h-2 ml-1" />
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    ))}
+                        ))
+                      : // Fallback to static data
+                        [
+                          "Likely to increase DeFi allocation by 15%",
+                          "May exit NEBULA position within 7 days",
+                          "Strong holder profile (avg hold: 45 days)",
+                          "High probability of staking rewards claim",
+                        ].map((insight, index) => (
+                          <div
+                            key={index}
+                            className="flex items-start space-x-3 p-3 bg-[#0C101A] rounded-lg border border-[#2D3748]"
+                          >
+                            <div className="w-2 h-2 bg-[#22D3EE] rounded-full mt-2"></div>
+                            <div>
+                              <p className="text-sm text-gray-300">{insight}</p>
+                              <div className="flex items-center space-x-2 mt-2">
+                                <Progress value={Math.floor(Math.random() * 40) + 60} className="w-20 h-2" />
+                                <Badge variant="outline" className="border-[#22D3EE] text-[#22D3EE] text-xs">
+                                  {Math.floor(Math.random() * 40) + 60}% confidence
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                   </div>
                 </CardContent>
               </Card>
@@ -173,7 +309,19 @@ export default function Analysis() {
                           </Badge>
                           <span className="text-xs text-[#22D3EE]">{pattern.confidence}</span>
                         </div>
-                        <div className="text-xs text-gray-400 font-mono">{pattern.wallet}</div>
+                        <div className="flex items-center space-x-2">
+                          <div className="text-xs text-gray-400 font-mono">
+                            {pattern.wallet.slice(0, 8)}...{pattern.wallet.slice(-6)}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-4 px-1 text-[#22D3EE] hover:bg-[#22D3EE]/20"
+                            onClick={() => window.open(seitraceAddr(pattern.wallet), "_blank")}
+                          >
+                            <ExternalLink className="w-2 h-2" />
+                          </Button>
+                        </div>
                         <div className="text-xs text-gray-500">{pattern.time}</div>
                       </div>
                     ))}
@@ -191,16 +339,48 @@ export default function Analysis() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-3">
-                    {riskMetrics.map((metric, index) => (
-                      <div key={index} className="text-center">
-                        <div
-                          className={`w-12 h-12 rounded-full ${metric.color} mx-auto mb-2 flex items-center justify-center`}
-                        >
-                          <span className="text-white font-bold text-sm">{metric.value}</span>
-                        </div>
-                        <div className="text-xs text-gray-400">{metric.label}</div>
-                      </div>
-                    ))}
+                    {analysisData?.riskAssessment
+                      ? [
+                          {
+                            label: "Identity Risk",
+                            value: Math.round(Number(analysisData.riskAssessment.identity)),
+                            color: "bg-green-500",
+                          },
+                          {
+                            label: "Contract Risk",
+                            value: Math.round(Number(analysisData.riskAssessment.contract)),
+                            color: "bg-yellow-500",
+                          },
+                          {
+                            label: "Liquidity Risk",
+                            value: Math.round(Number(analysisData.riskAssessment.liquidity)),
+                            color: "bg-red-500",
+                          },
+                          {
+                            label: "Behavior Risk",
+                            value: Math.round(Number(analysisData.riskAssessment.behavior)),
+                            color: "bg-yellow-500",
+                          },
+                        ].map((metric, index) => (
+                          <div key={index} className="text-center">
+                            <div
+                              className={`w-12 h-12 rounded-full ${metric.color} mx-auto mb-2 flex items-center justify-center`}
+                            >
+                              <span className="text-white font-bold text-sm">{metric.value}</span>
+                            </div>
+                            <div className="text-xs text-gray-400">{metric.label}</div>
+                          </div>
+                        ))
+                      : riskMetrics.map((metric, index) => (
+                          <div key={index} className="text-center">
+                            <div
+                              className={`w-12 h-12 rounded-full ${metric.color} mx-auto mb-2 flex items-center justify-center`}
+                            >
+                              <span className="text-white font-bold text-sm">{metric.value}</span>
+                            </div>
+                            <div className="text-xs text-gray-400">{metric.label}</div>
+                          </div>
+                        ))}
                   </div>
                 </CardContent>
               </Card>
@@ -255,13 +435,16 @@ export default function Analysis() {
                         <TableHead className="text-gray-400">Wallet</TableHead>
                         <TableHead className="text-gray-400">Pattern</TableHead>
                         <TableHead className="text-gray-400">Confidence</TableHead>
+                        <TableHead className="text-gray-400">Explorer</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {transactionPatterns.map((pattern, index) => (
                         <TableRow key={index} className="border-[#2D3748] hover:bg-[#0C101A]">
                           <TableCell className="font-mono text-sm">{pattern.time}</TableCell>
-                          <TableCell className="font-mono text-[#22D3EE]">{pattern.wallet}</TableCell>
+                          <TableCell className="font-mono text-[#22D3EE]">
+                            {pattern.wallet.slice(0, 8)}...{pattern.wallet.slice(-6)}
+                          </TableCell>
                           <TableCell>
                             <Badge
                               variant="outline"
@@ -275,6 +458,16 @@ export default function Analysis() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-[#22D3EE] font-semibold">{pattern.confidence}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-[#22D3EE] hover:bg-[#22D3EE]/20"
+                              onClick={() => window.open(seitraceAddr(pattern.wallet), "_blank")}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
